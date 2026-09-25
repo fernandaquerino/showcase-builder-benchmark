@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +31,6 @@ type Draft = {
   category: string;
   size: string;
   color: string;
-  price: string;
   imageUrl: string;
 };
 
@@ -41,10 +40,13 @@ function draftFromItem(item: ImportProductItem): Draft {
     category: item.category,
     size: item.size ?? "",
     color: item.color ?? "",
-    // Show the canonical decimal ("129.90") as BR input ("129,90").
-    price: item.price ? item.price.replace(".", ",") : "",
     imageUrl: item.imageUrl,
   };
+}
+
+/** Shows the canonical decimal ("129.90") as BR input ("129,90"). */
+function priceInputFromItem(item: ImportProductItem): string {
+  return item.price ? item.price.replace(".", ",") : "";
 }
 
 export function ProductImportEditSheet({
@@ -59,17 +61,34 @@ export function ProductImportEditSheet({
       category: "",
       size: "",
       color: "",
-      price: "",
       imageUrl: "",
     },
   );
-  // Reset the draft when a different item opens the sheet (React's recommended
-  // "adjust state during render" pattern — no effect needed).
-  const [trackedId, setTrackedId] = useState<string | null>(item?.id ?? null);
-  if (item && item.id !== trackedId) {
-    setTrackedId(item.id);
-    setDraft(draftFromItem(item));
+  // Start from the product's current values every time the sheet opens
+  // (React's recommended "adjust state during render" pattern — no effect).
+  const openedItemId = open && item ? item.id : null;
+  const [draftItemId, setDraftItemId] = useState<string | null>(openedItemId);
+  if (openedItemId !== draftItemId) {
+    setDraftItemId(openedItemId);
+    if (item && openedItemId) {
+      setDraft(draftFromItem(item));
+    }
   }
+
+  // The price keeps the creator's own formatting while she types ("1.299,9")
+  // instead of being re-derived from the canonical value.
+  const [price, setPrice] = useState(() =>
+    item ? priceInputFromItem(item) : "",
+  );
+  const [priceItemId, setPriceItemId] = useState<string | null>(
+    item?.id ?? null,
+  );
+  if (item && item.id !== priceItemId) {
+    setPriceItemId(item.id);
+    setPrice(priceInputFromItem(item));
+  }
+
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   const nameId = useId();
   const categoryId = useId();
@@ -88,8 +107,8 @@ export function ProductImportEditSheet({
     }
     // Keep item.price as a canonical decimal. Parse the BR input back; on
     // invalid input keep the previous value so a typo never wipes a good price.
-    const parsedPrice = parseBrlPrice(draft.price);
-    const price =
+    const parsedPrice = parseBrlPrice(price);
+    const nextPrice =
       parsedPrice.kind === "valid"
         ? parsedPrice.value
         : parsedPrice.kind === "empty"
@@ -101,7 +120,7 @@ export function ProductImportEditSheet({
       category: draft.category,
       size: draft.size.trim() === "" ? null : draft.size,
       color: draft.color.trim() === "" ? null : draft.color,
-      price,
+      price: nextPrice,
       imageUrl: draft.imageUrl,
     });
     onOpenChange(false);
@@ -109,7 +128,25 @@ export function ProductImportEditSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent>
+      <SheetContent
+        onOpenAutoFocus={() => {
+          // Remember the card that opened the editor, so closing it takes the
+          // creator back to the same product in the review grid.
+          if (returnFocusRef.current === null) {
+            returnFocusRef.current =
+              document.activeElement?.closest<HTMLElement>(
+                "[data-import-card]",
+              ) ?? null;
+          }
+        }}
+        onCloseAutoFocus={(event) => {
+          const card = returnFocusRef.current;
+          if (card?.isConnected) {
+            event.preventDefault();
+            card.focus();
+          }
+        }}
+      >
         <SheetHeader>
           <SheetTitle>Editar produto</SheetTitle>
           <SheetDescription>
@@ -160,8 +197,8 @@ export function ProductImportEditSheet({
             <Label htmlFor={priceId}>Preço</Label>
             <Input
               id={priceId}
-              value={draft.price}
-              onChange={(event) => update("price", event.target.value)}
+              value={price}
+              onChange={(event) => setPrice(event.target.value)}
               placeholder="99,90"
               inputMode="decimal"
             />

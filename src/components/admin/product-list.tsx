@@ -21,10 +21,11 @@ import {
   SortableProductCard,
   type ProductCardData,
 } from "@/components/admin/sortable-product-card";
+import type { ActionResult } from "@/server/actions/action-result";
 import {
   moveProductDownAction,
+  moveProductToAction,
   moveProductUpAction,
-  reorderProductsAction,
 } from "@/server/actions/products";
 
 type OrderStatus =
@@ -34,7 +35,18 @@ type OrderStatus =
   | { kind: "error"; message: string };
 
 function signature(items: ProductCardData[]): string {
-  return items.map((item) => item.id).join(",");
+  return items
+    .map((item) => item.id)
+    .sort()
+    .join(",");
+}
+
+function formatPositions(positions: number[]): string {
+  if (positions.length === 1) {
+    return String(positions[0]);
+  }
+
+  return `${positions.slice(0, -1).join(", ")} e ${positions[positions.length - 1]}`;
 }
 
 export function ProductList({
@@ -46,10 +58,14 @@ export function ProductList({
 }) {
   const [items, setItems] = useState(products);
   const [status, setStatus] = useState<OrderStatus>({ kind: "idle" });
+  const [brokenImagePositions, setBrokenImagePositions] = useState<number[]>(
+    [],
+  );
   const [isPending, startTransition] = useTransition();
 
-  // Re-sync with the server order whenever the props change (e.g. after a
-  // product is added or deleted and the page re-renders).
+  // Re-sync with the server whenever products are added or removed (e.g. after
+  // a delete or a bulk import). Reorders are already applied locally, so the
+  // server response doesn't need to snap the list back into place.
   const propsSignature = signature(products);
   const lastSignature = useRef(propsSignature);
   useEffect(() => {
@@ -67,15 +83,24 @@ export function ProductList({
     }),
   );
 
-  function persist(nextItems: ProductCardData[], previous: ProductCardData[]) {
+  function reportBrokenImage(position: number) {
+    setBrokenImagePositions((current) =>
+      current.includes(position)
+        ? current
+        : [...current, position].sort((a, b) => a - b),
+    );
+  }
+
+  function persistOrder(
+    nextItems: ProductCardData[],
+    previous: ProductCardData[],
+    save: () => Promise<ActionResult>,
+  ) {
     setItems(nextItems);
     setStatus({ kind: "saving" });
 
     startTransition(async () => {
-      const result = await reorderProductsAction(
-        liveId,
-        nextItems.map((item) => item.id),
-      );
+      const result = await save();
 
       if (!result.success) {
         setItems(previous);
@@ -100,7 +125,9 @@ export function ProductList({
       return;
     }
 
-    persist(arrayMove(items, oldIndex, newIndex), items);
+    persistOrder(arrayMove(items, oldIndex, newIndex), items, () =>
+      moveProductToAction(liveId, String(active.id), String(over.id)),
+    );
   }
 
   function move(productId: string, direction: -1 | 1) {
@@ -110,26 +137,11 @@ export function ProductList({
       return;
     }
 
-    const previous = items;
-    const nextItems = arrayMove(items, index, target);
-    setItems(nextItems);
-    setStatus({ kind: "saving" });
-
-    startTransition(async () => {
-      const result =
-        direction === -1
-          ? await moveProductUpAction(liveId, productId)
-          : await moveProductDownAction(liveId, productId);
-
-      if (!result.success) {
-        setItems(previous);
-        setStatus({ kind: "error", message: result.message });
-        return;
-      }
-
-      lastSignature.current = signature(nextItems);
-      setStatus({ kind: "saved" });
-    });
+    persistOrder(arrayMove(items, index, target), items, () =>
+      direction === -1
+        ? moveProductUpAction(liveId, productId)
+        : moveProductDownAction(liveId, productId),
+    );
   }
 
   return (
@@ -145,6 +157,15 @@ export function ProductList({
           <span className="text-destructive">{status.message}</span>
         )}
       </p>
+
+      {brokenImagePositions.length > 0 && (
+        <p className="text-sm text-destructive" aria-live="polite">
+          {brokenImagePositions.length === 1
+            ? `A imagem do produto na posição ${formatPositions(brokenImagePositions)} não carregou.`
+            : `As imagens dos produtos nas posições ${formatPositions(brokenImagePositions)} não carregaram.`}{" "}
+          Edite o produto para trocar a imagem.
+        </p>
+      )}
 
       <DndContext
         id={`products-${liveId}`}
@@ -165,6 +186,8 @@ export function ProductList({
                 position={index + 1}
                 total={items.length}
                 disabled={isPending}
+                imageBroken={brokenImagePositions.includes(index + 1)}
+                onImageError={() => reportBrokenImage(index + 1)}
                 onMoveUp={() => move(product.id, -1)}
                 onMoveDown={() => move(product.id, 1)}
               />

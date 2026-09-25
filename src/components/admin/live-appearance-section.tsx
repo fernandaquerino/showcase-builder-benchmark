@@ -41,6 +41,8 @@ type LiveAppearanceSectionProps = {
 
 type PreviewDevice = "mobile" | "desktop";
 
+const PREVIEW_UPDATE_DELAY_MS = 120;
+
 const buttonLabels: Record<LiveThemeButtonStyle, string> = {
   rounded: "Arredondado",
   soft: "Suave",
@@ -65,8 +67,39 @@ const heroLabels: Record<LiveThemeHeroStyle, string> = {
   clean: "Visual limpo",
 };
 
-function asStyle(theme: LiveThemeConfig): CSSProperties {
-  return getLiveThemeCssVariables(theme) as CSSProperties;
+const loadedPreviewFonts = new Set<string>();
+
+/**
+ * Keeps the preview heading on a font that is already available, so switching
+ * typography doesn't flash the fallback font while the new one loads.
+ */
+function usePreviewHeadingFont(fontFamily: string): string {
+  const [headingFont, setHeadingFont] = useState(fontFamily);
+
+  useEffect(() => {
+    if (loadedPreviewFonts.has(fontFamily)) {
+      return;
+    }
+
+    let active = true;
+    const fonts = typeof document === "undefined" ? undefined : document.fonts;
+    const loading = fonts
+      ? fonts.load(`600 1em ${fontFamily}`).catch(() => [])
+      : Promise.resolve([]);
+
+    void loading.then(() => {
+      loadedPreviewFonts.add(fontFamily);
+      if (active) {
+        setHeadingFont(fontFamily);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [fontFamily]);
+
+  return headingFont;
 }
 
 function OptionButton<T extends string>({
@@ -110,7 +143,8 @@ function ThemePreview({
   products: Product[];
   device: PreviewDevice;
 }) {
-  const css = asStyle(theme);
+  const variables = getLiveThemeCssVariables(theme);
+  const headingFont = usePreviewHeadingFont(variables["--live-font-family"]);
   const sampleProducts =
     products.length > 0
       ? products.slice(0, 2)
@@ -141,10 +175,10 @@ function ThemePreview({
     <div
       aria-label="Prévia visual da página da live"
       className={cn(
-        "mx-auto overflow-hidden border bg-[var(--live-background)] text-[var(--live-foreground)] shadow-sm",
+        "mx-auto overflow-hidden border bg-[var(--live-background)] font-[family-name:var(--live-font-family)] text-[var(--live-foreground)] shadow-sm",
         device === "mobile" ? "max-w-[360px] rounded-[2rem]" : "w-full rounded-2xl",
       )}
-      style={css}
+      style={variables as CSSProperties}
     >
       <div
         className={cn(
@@ -167,7 +201,10 @@ function ThemePreview({
           <span className="inline-flex rounded-full bg-[var(--live-primary)] px-3 py-1 text-xs font-semibold text-[var(--live-primary-foreground)]">
             Live agendada
           </span>
-          <h3 className="max-w-sm text-3xl font-semibold leading-tight">
+          <h3
+            className="max-w-sm text-3xl font-semibold leading-tight"
+            style={{ fontFamily: headingFont }}
+          >
             {title || "Minha live especial"}
           </h3>
           <p className="text-sm opacity-75">02 dias · 04 horas · 18 min</p>
@@ -266,6 +303,25 @@ export function LiveAppearanceSection({
   const [device, setDevice] = useState<PreviewDevice>("mobile");
   const [isPending, startTransition] = useTransition();
 
+  // The native color picker fires a change on every drag step; debounce the
+  // preview so the controls stay responsive while the page re-renders.
+  const [previewTheme, setPreviewTheme] = useState<LiveThemeConfig>(theme);
+  const [schedulePreview] = useState(() => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    function schedule(next: Partial<LiveThemeConfig>) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        setPreviewTheme(mergeLiveThemeWithPreset({ ...theme, ...next }));
+      }, PREVIEW_UPDATE_DELAY_MS);
+    }
+
+    schedule.cancel = () => clearTimeout(timeout);
+    return schedule;
+  });
+
+  useEffect(() => schedulePreview.cancel, [schedulePreview]);
+
   const contrast = useMemo(() => validateThemeContrast(theme), [theme]);
   const isDirty = JSON.stringify(theme) !== JSON.stringify(savedTheme);
 
@@ -285,10 +341,16 @@ export function LiveAppearanceSection({
 
   function updateTheme(next: Partial<LiveThemeConfig>) {
     setTheme((current) => mergeLiveThemeWithPreset({ ...current, ...next }));
+    schedulePreview(next);
+  }
+
+  function replaceTheme(nextTheme: LiveThemeConfig) {
+    setTheme(nextTheme);
+    schedulePreview(nextTheme);
   }
 
   function applyPreset(preset: LiveThemePresetId) {
-    setTheme(stripLiveThemePresetMeta(getLiveThemePreset(preset)));
+    replaceTheme(stripLiveThemePresetMeta(getLiveThemePreset(preset)));
   }
 
   function saveTheme(nextTheme = theme) {
@@ -296,7 +358,7 @@ export function LiveAppearanceSection({
       const result = await updateAccountAppearanceAction(nextTheme);
       if (result.success) {
         setSavedTheme(nextTheme);
-        setTheme(nextTheme);
+        replaceTheme(nextTheme);
         toast.success("A aparência da vitrine foi atualizada.");
         return;
       }
@@ -318,7 +380,7 @@ export function LiveAppearanceSection({
     startTransition(async () => {
       const result = await updateAccountAppearanceAction(null);
       if (result.success) {
-        setTheme(defaultTheme);
+        replaceTheme(defaultTheme);
         setSavedTheme(defaultTheme);
         toast.success("Tema padrão restaurado.");
         return;
@@ -386,7 +448,7 @@ export function LiveAppearanceSection({
                 <div className="flex gap-2">
                   <Input
                     type="color"
-                    value={theme.primaryColor}
+                    defaultValue={theme.primaryColor}
                     aria-label="Selecionar cor principal"
                     className="h-11 w-14 p-1"
                     onChange={(event) =>
@@ -407,7 +469,7 @@ export function LiveAppearanceSection({
                 <div className="flex gap-2">
                   <Input
                     type="color"
-                    value={theme.backgroundColor}
+                    defaultValue={theme.backgroundColor}
                     aria-label="Selecionar cor de fundo"
                     className="h-11 w-14 p-1"
                     onChange={(event) =>
@@ -456,7 +518,7 @@ export function LiveAppearanceSection({
                   variant="outline"
                   size="sm"
                   className="mt-2"
-                  onClick={() => setTheme(contrast.recommended)}
+                  onClick={() => replaceTheme(contrast.recommended)}
                 >
                   Usar combinação recomendada
                 </Button>
@@ -579,7 +641,7 @@ export function LiveAppearanceSection({
             </div>
           </div>
           <ThemePreview
-            theme={theme}
+            theme={previewTheme}
             title={title}
             coverImageUrl={coverImageUrl}
             products={products}

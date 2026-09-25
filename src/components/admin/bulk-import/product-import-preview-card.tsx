@@ -1,8 +1,9 @@
 "use client";
 
 import { ImageOff, Pencil, RefreshCw, Trash2 } from "lucide-react";
-import { useId } from "react";
+import { useId, useState } from "react";
 
+import { ProductImage } from "@/components/admin/product-image";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import { ImportStatusBadge } from "./import-status-badge";
 
 export type ProductImportPreviewCardProps = {
   item: ImportProductItem;
+  retrying?: boolean;
   onSizeChange: (size: string) => void;
   onToggleSelected: (selected: boolean) => void;
   onEdit: () => void;
@@ -22,6 +24,7 @@ export type ProductImportPreviewCardProps = {
 
 export function ProductImportPreviewCard({
   item,
+  retrying = false,
   onSizeChange,
   onToggleSelected,
   onEdit,
@@ -35,15 +38,27 @@ export function ProductImportPreviewCard({
   const isFailed = item.status === "failed";
   const canSelect = item.status === "ready";
 
+  // Local checkbox state so the tick responds immediately, even while the
+  // whole review grid re-renders.
+  const [checked, setChecked] = useState(item.selected);
+  const [checkedForStatus, setCheckedForStatus] = useState(item.status);
+  if (item.status !== checkedForStatus) {
+    setCheckedForStatus(item.status);
+    setChecked(item.selected);
+  }
+
   return (
     <article className="flex flex-col gap-3 rounded-2xl border bg-card p-3 shadow-sm">
       <div className="flex items-start gap-2">
         <div className="flex items-center pt-0.5">
           <Checkbox
             id={selectId}
-            checked={item.selected}
+            checked={checked}
             disabled={!canSelect && !item.selected}
-            onCheckedChange={(checked) => onToggleSelected(checked === true)}
+            onCheckedChange={(value) => {
+              setChecked(value === true);
+              onToggleSelected(value === true);
+            }}
           />
           <Label htmlFor={selectId} className="sr-only">
             Selecionar {item.name || "produto"}
@@ -54,12 +69,10 @@ export function ProductImportPreviewCard({
 
       <div className="aspect-[4/5] overflow-hidden rounded-xl bg-muted">
         {item.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- extracted external product image.
-          <img
+          <ProductImage
             src={item.imageUrl}
             alt={item.name || "Prévia do produto"}
-            className="size-full object-cover"
-            loading="lazy"
+            className="size-full rounded-none border-0"
           />
         ) : (
           <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -89,7 +102,15 @@ export function ProductImportPreviewCard({
             {item.errorMessage ?? "Não conseguimos buscar este produto."}
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={onRetry} className="min-h-11">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              loading={retrying}
+              loadingText="Buscando..."
+              className="min-h-11"
+            >
               <RefreshCw className="size-4" aria-hidden="true" />
               Tentar novamente
             </Button>

@@ -33,12 +33,14 @@ type LiveFormProps =
       liveId?: undefined;
       initialValues?: undefined;
       onSaved?: undefined;
+      onCoverUploaded?: undefined;
     }
   | {
       mode: "edit";
       liveId: string;
       initialValues: LiveFormValues;
       onSaved?: () => void;
+      onCoverUploaded?: (url: string) => void;
     };
 
 export function LiveForm({
@@ -46,6 +48,7 @@ export function LiveForm({
   liveId,
   initialValues,
   onSaved,
+  onCoverUploaded,
 }: LiveFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -67,6 +70,7 @@ export function LiveForm({
 
   const coverImageUrl = useWatch({ control, name: "coverImageUrl" });
   const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const coverUploadFailed = errors.coverImageUrl?.type === "upload";
 
   // Warn before leaving with unsaved changes.
   useEffect(() => {
@@ -177,10 +181,16 @@ export function LiveForm({
         <input type="hidden" {...register("coverImageUrl")} />
         <LiveImageUpload
           value={coverImageUrl?.trim() ? coverImageUrl : null}
-          onChange={(url) =>
-            setValue("coverImageUrl", url ?? "", { shouldDirty: true })
-          }
+          onChange={(url) => {
+            setValue("coverImageUrl", url ?? "", { shouldDirty: true });
+            if (url) {
+              onCoverUploaded?.(url);
+            }
+          }}
           onUploadingChange={setIsUploadingCover}
+          onError={(message) =>
+            setError("coverImageUrl", { type: "upload", message })
+          }
           disabled={isPending}
           error={errors.coverImageUrl?.message}
         />
@@ -191,7 +201,7 @@ export function LiveForm({
           type="submit"
           loading={isPending}
           loadingText="Salvando..."
-          disabled={isUploadingCover}
+          disabled={isUploadingCover || coverUploadFailed}
         >
           {mode === "create" ? "Salvar rascunho" : "Salvar alterações"}
         </Button>

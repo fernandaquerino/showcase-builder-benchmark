@@ -33,6 +33,8 @@ type SortableProductCardProps = {
   position: number;
   total: number;
   disabled: boolean;
+  imageBroken: boolean;
+  onImageError: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
 };
@@ -43,6 +45,8 @@ export function SortableProductCard({
   position,
   total,
   disabled,
+  imageBroken,
+  onImageError,
   onMoveUp,
   onMoveDown,
 }: SortableProductCardProps) {
@@ -82,9 +86,10 @@ export function SortableProductCard({
       </button>
 
       <ProductImage
-        src={product.imageUrl}
+        src={imageBroken ? null : product.imageUrl}
         alt={`Foto de ${product.name}`}
         className="size-16 shrink-0 sm:size-20"
+        onError={onImageError}
       />
 
       <div className="min-w-0 flex-1">

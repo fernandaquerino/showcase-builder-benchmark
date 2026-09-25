@@ -51,6 +51,11 @@ export const liveInputSchema = z.object({
 
 export const liveIdSchema = z.uuid("Identificador inválido.");
 
+/** Status filter of the lives list (`/admin?status=...`). */
+export const LIVE_STATUS_FILTERS = ["todas", "publicadas", "rascunhos"] as const;
+export type LiveStatusFilter = (typeof LIVE_STATUS_FILTERS)[number];
+export const liveStatusFilterSchema = z.enum(LIVE_STATUS_FILTERS).catch("todas");
+
 /** Raw string fields the form binds to (schema input). */
 export type LiveFormValues = z.input<typeof liveInputSchema>;
 /** Normalized values the schema produces (optional fields become `null`). */

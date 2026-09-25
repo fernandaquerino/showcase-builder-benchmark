@@ -5,16 +5,41 @@ import { redirect } from "next/navigation";
 
 import { LiveEmptyState } from "@/components/admin/live-empty-state";
 import { LiveList } from "@/components/admin/live-list";
+import { LiveStatusFilterTabs } from "@/components/admin/publish-control";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { auth } from "@/lib/auth";
+import {
+  liveStatusFilterSchema,
+  type LiveStatusFilter,
+} from "@/lib/validations/live";
 import { getLivesByUserId, type Live } from "@/server/db/queries/lives";
 
 export const metadata: Metadata = {
   title: "Suas lives",
 };
 
-export default async function AdminPage() {
+const emptyFilterMessages: Record<LiveStatusFilter, string> = {
+  todas: "Nenhuma live por aqui.",
+  publicadas: "Nenhuma live publicada no momento.",
+  rascunhos: "Nenhum rascunho no momento.",
+};
+
+function matchesStatusFilter(live: Live, filter: LiveStatusFilter): boolean {
+  if (filter === "publicadas") {
+    return live.status === "published";
+  }
+  if (filter === "rascunhos") {
+    return live.status === "draft";
+  }
+  return true;
+}
+
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
   const session = await auth();
 
   if (!session?.user) {
@@ -22,6 +47,9 @@ export default async function AdminPage() {
   }
 
   const firstName = session.user.name?.split(/\s+/)[0] ?? "criadora";
+  const statusFilter = liveStatusFilterSchema.parse(
+    (await searchParams).status,
+  );
 
   let lives: Live[] | null = null;
 
@@ -76,7 +104,32 @@ export default async function AdminPage() {
         ) : lives.length === 0 ? (
           <LiveEmptyState />
         ) : (
-          <LiveList handle={session.user.handle} lives={lives} />
+          <div className="space-y-5">
+            <LiveStatusFilterTabs
+              current={statusFilter}
+              counts={{
+                todas: lives.length,
+                publicadas: lives.filter((live) =>
+                  matchesStatusFilter(live, "publicadas"),
+                ).length,
+                rascunhos: lives.filter((live) =>
+                  matchesStatusFilter(live, "rascunhos"),
+                ).length,
+              }}
+            />
+            {lives.some((live) => matchesStatusFilter(live, statusFilter)) ? (
+              <LiveList
+                handle={session.user.handle}
+                lives={lives.filter((live) =>
+                  matchesStatusFilter(live, statusFilter),
+                )}
+              />
+            ) : (
+              <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                {emptyFilterMessages[statusFilter]}
+              </p>
+            )}
+          </div>
         )}
       </section>
     </main>

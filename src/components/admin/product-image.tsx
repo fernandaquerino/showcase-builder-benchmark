@@ -1,7 +1,6 @@
 "use client";
 
 import { ImageOff } from "lucide-react";
-import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -9,6 +8,7 @@ type ProductImageProps = {
   src: string | null;
   alt: string;
   className?: string;
+  onError?: () => void;
 };
 
 /**
@@ -21,35 +21,38 @@ type ProductImageProps = {
  * public card and optimized images come in a later phase. A fixed-size box
  * prevents layout shift and an `onError` fallback keeps the card intact.
  */
-export function ProductImage({ src, alt, className }: ProductImageProps) {
-  // Track the source that failed instead of a boolean, so changing `src` (e.g.
-  // during the live form preview) clears the fallback without an effect.
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-
-  const showFallback = !src || failedSrc === src;
-
+export function ProductImage({ src, alt, className, onError }: ProductImageProps) {
   return (
     <div
       className={cn(
-        "flex items-center justify-center overflow-hidden rounded-lg border bg-muted text-muted-foreground",
+        "group flex items-center justify-center overflow-hidden rounded-lg border bg-muted text-muted-foreground",
         className,
       )}
     >
-      {showFallback ? (
-        <span className="flex flex-col items-center gap-1 px-2 text-center text-xs">
-          <ImageOff className="size-5" aria-hidden="true" />
-          <span>Não foi possível carregar esta imagem.</span>
-        </span>
-      ) : (
+      {src ? (
         // eslint-disable-next-line @next/next/no-img-element -- untrusted external host; see component doc.
         <img
           src={src}
           alt={alt}
-          className="size-full object-cover"
+          className="size-full object-cover data-[state=error]:hidden"
           loading="lazy"
-          onError={() => setFailedSrc(src)}
+          onError={(event) => {
+            // Toggle the fallback with CSS instead of state, so a broken image
+            // in a long list doesn't re-render its whole card.
+            event.currentTarget.dataset.state = "error";
+            onError?.();
+          }}
         />
-      )}
+      ) : null}
+      <span
+        className={cn(
+          "flex-col items-center gap-1 px-2 text-center text-xs",
+          src ? "hidden group-has-[img[data-state=error]]:flex" : "flex",
+        )}
+      >
+        <ImageOff className="size-5" aria-hidden="true" />
+        <span>Não foi possível carregar esta imagem.</span>
+      </span>
     </div>
   );
 }

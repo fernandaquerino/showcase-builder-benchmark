@@ -81,6 +81,7 @@ export function BulkProductImportPage({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [resumeItems, setResumeItems] = useState<ImportProductItem[] | null>(null);
+  const [retryingIds, setRetryingIds] = useState<string[]>([]);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Offer to resume an import left in progress (sessionStorage, per live).
@@ -140,8 +141,26 @@ export function BulkProductImportPage({
     void runQueue(targets);
   }
 
-  function handleRetry(item: ImportProductItem) {
-    void runQueue([{ id: item.id, affiliateUrl: item.affiliateUrl }]);
+  // Retrying a single card fetches it in place, without taking over the
+  // review screen with the progress bar.
+  async function handleRetry(item: ImportProductItem) {
+    setRetryingIds((current) => [...current, item.id]);
+    try {
+      const result = await requestExtraction(item.affiliateUrl);
+      if (result.success) {
+        dispatch({ type: "applyExtraction", id: item.id, data: result.data });
+      } else {
+        dispatch({ type: "failed", id: item.id, message: result.error.message });
+      }
+    } catch {
+      dispatch({
+        type: "failed",
+        id: item.id,
+        message: extractionErrorMessage("EXTRACTION_FAILED"),
+      });
+    } finally {
+      setRetryingIds((current) => current.filter((id) => id !== item.id));
+    }
   }
 
   function focusFirstPending() {
@@ -288,6 +307,7 @@ export function BulkProductImportPage({
           <li key={item.id}>
             <div
               tabIndex={-1}
+              data-import-card
               ref={(node) => {
                 if (node) {
                   cardRefs.current.set(item.id, node);
@@ -298,6 +318,7 @@ export function BulkProductImportPage({
             >
               <ProductImportPreviewCard
                 item={item}
+                retrying={retryingIds.includes(item.id)}
                 onSizeChange={(size) =>
                   dispatch({ type: "setSize", id: item.id, size })
                 }
@@ -306,7 +327,7 @@ export function BulkProductImportPage({
                 }
                 onEdit={() => setEditingId(item.id)}
                 onRemove={() => dispatch({ type: "remove", id: item.id })}
-                onRetry={() => handleRetry(item)}
+                onRetry={() => void handleRetry(item)}
               />
             </div>
           </li>

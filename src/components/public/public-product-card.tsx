@@ -14,12 +14,14 @@ type PublicProductCardProps = {
   product: PublicProduct;
   theme: LiveThemeConfig;
   priority?: boolean;
+  titleHeight?: number | null;
 };
 
 export function PublicProductCard({
   product,
   theme,
   priority = false,
+  titleHeight = null,
 }: PublicProductCardProps) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const showFallback = failedSrc === product.imageUrl;
@@ -64,7 +66,11 @@ export function PublicProductCard({
         </Badge>
 
         <div className="space-y-1">
-          <h3 className="line-clamp-3 text-sm font-semibold leading-5 sm:text-base sm:leading-6">
+          <h3
+            data-product-title
+            className="line-clamp-3 text-sm font-semibold leading-5 sm:text-base sm:leading-6"
+            style={titleHeight ? { height: titleHeight } : undefined}
+          >
             {product.name}
           </h3>
           {(product.size || product.color) && (

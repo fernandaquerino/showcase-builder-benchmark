@@ -276,14 +276,14 @@ export async function reorderProductsAction(
 }
 
 /**
- * Moves a product one step up or down. The new order is computed on the server
- * from the live's current order, then persisted through the validated reorder
- * path, so a manipulated client payload cannot shuffle products arbitrarily.
+ * Moves a product to a new slot. The new order is computed on the server from
+ * the live's current order, then persisted through the validated reorder path,
+ * so a manipulated client payload cannot shuffle products arbitrarily.
  */
 async function moveProduct(
   liveId: string,
   productId: string,
-  direction: -1 | 1,
+  resolveTarget: (index: number, orderedIds: string[]) => number,
 ): Promise<ActionResult> {
   const userId = await getSessionUserId();
   if (!userId) {
@@ -303,12 +303,12 @@ async function moveProduct(
       return { success: false, message: NOT_FOUND };
     }
 
-    const target = index + direction;
-    if (target < 0 || target >= current.length) {
+    const ordered = current.map((p) => p.id);
+    const target = resolveTarget(index, ordered);
+    if (target < 0 || target >= current.length || target === index) {
       return { success: true };
     }
 
-    const ordered = current.map((p) => p.id);
     [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
 
     const result = await reorderProducts(parsedLiveId.data, userId, ordered);
@@ -329,12 +329,31 @@ export async function moveProductUpAction(
   liveId: string,
   productId: string,
 ): Promise<ActionResult> {
-  return moveProduct(liveId, productId, -1);
+  return moveProduct(liveId, productId, (index) => index - 1);
 }
 
 export async function moveProductDownAction(
   liveId: string,
   productId: string,
 ): Promise<ActionResult> {
-  return moveProduct(liveId, productId, 1);
+  return moveProduct(liveId, productId, (index) => index + 1);
+}
+
+/**
+ * Drag and drop: moves a product into the slot of the product it was dropped
+ * on. Only ids travel from the client; the order itself is resolved above.
+ */
+export async function moveProductToAction(
+  liveId: string,
+  productId: string,
+  targetProductId: string,
+): Promise<ActionResult> {
+  const parsedTargetId = productIdSchema.safeParse(targetProductId);
+  if (!parsedTargetId.success) {
+    return { success: false, message: NOT_FOUND };
+  }
+
+  return moveProduct(liveId, productId, (_index, orderedIds) =>
+    orderedIds.indexOf(parsedTargetId.data),
+  );
 }

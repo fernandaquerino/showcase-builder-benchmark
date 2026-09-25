@@ -2,6 +2,7 @@ import { CalendarDays, Clock, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 import { DeleteLiveDialog } from "@/components/admin/delete-live-dialog";
+import { LiveListCover } from "@/components/admin/live-image-upload";
 import { LiveStatusBadge } from "@/components/admin/live-status-badge";
 import { PublishControl } from "@/components/admin/publish-control";
 import { Button } from "@/components/ui/button";
@@ -23,12 +24,11 @@ function LiveListItem({ handle, live }: { handle: string; live: Live }) {
     <Card className="flex flex-col gap-4 p-5">
       {live.coverImageUrl && (
         <div className="aspect-[16/9] overflow-hidden rounded-lg border bg-muted">
-          {/* eslint-disable-next-line @next/next/no-img-element -- blob/external cover URL, no optimizer wildcard. */}
-          <img
+          <LiveListCover
+            liveId={live.id}
             src={live.coverImageUrl}
             alt={`Capa da live ${live.title}`}
             className="size-full object-cover"
-            loading="lazy"
           />
         </div>
       )}

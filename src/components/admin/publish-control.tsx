@@ -16,7 +16,62 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button, type ButtonProps } from "@/components/ui/button";
+import {
+  LIVE_STATUS_FILTERS,
+  type LiveStatusFilter,
+} from "@/lib/validations/live";
 import { publishLiveAction, unpublishLiveAction } from "@/server/actions/lives";
+
+const statusFilterLabels: Record<LiveStatusFilter, string> = {
+  todas: "Todas",
+  publicadas: "Publicadas",
+  rascunhos: "Rascunhos",
+};
+
+/** Filters the lives list by status, keeping the choice in the URL. */
+export function LiveStatusFilterTabs({
+  current,
+  counts,
+}: {
+  current: LiveStatusFilter;
+  counts: Record<LiveStatusFilter, number>;
+}) {
+  const router = useRouter();
+  const [selected, setSelected] = useState(current);
+  const [isPending, startTransition] = useTransition();
+
+  function select(filter: LiveStatusFilter) {
+    setSelected(filter);
+    startTransition(() => {
+      router.push(filter === "todas" ? "/admin" : `/admin?status=${filter}`, {
+        scroll: false,
+      });
+    });
+  }
+
+  return (
+    <div
+      role="group"
+      aria-label="Filtrar lives por status"
+      aria-busy={isPending}
+      className="flex flex-wrap gap-2"
+    >
+      {LIVE_STATUS_FILTERS.map((filter) => (
+        <Button
+          key={filter}
+          type="button"
+          size="sm"
+          variant={selected === filter ? "default" : "outline"}
+          aria-pressed={selected === filter}
+          onClick={() => select(filter)}
+        >
+          {statusFilterLabels[filter]}
+          <span className="opacity-75">{counts[filter]}</span>
+        </Button>
+      ))}
+    </div>
+  );
+}
 
 type PublishControlProps = {
   liveId: string;

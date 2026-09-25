@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { LiveThemeConfig } from "@/lib/live-theme";
@@ -25,6 +25,30 @@ export function ProductBrowser({ products, theme }: ProductBrowserProps) {
   const visibleProducts = products.filter((product) =>
     productMatchesCategory(product, activeCategory),
   );
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [titleHeight, setTitleHeight] = useState<number | null>(null);
+
+  // Give every card title the same height so prices and buttons line up
+  // across the grid, and re-measure whenever the grid is resized.
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      let tallest = 0;
+      grid
+        .querySelectorAll<HTMLElement>("[data-product-title]")
+        .forEach((title) => {
+          tallest = Math.max(tallest, title.getBoundingClientRect().height);
+        });
+      setTitleHeight(tallest > 0 ? Math.ceil(tallest) : null);
+    });
+
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [visibleProducts.length]);
 
   if (products.length === 0) {
     return (
@@ -94,13 +118,17 @@ export function ProductBrowser({ products, theme }: ProductBrowserProps) {
           }}
         />
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
+        <div
+          ref={gridRef}
+          className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4"
+        >
           {visibleProducts.map((product, index) => (
             <PublicProductCard
               key={product.id}
               product={product}
               theme={theme}
               priority={index < 2}
+              titleHeight={titleHeight}
             />
           ))}
         </div>

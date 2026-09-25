@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 import { Button } from "@/components/ui/button";
 import type { ImportCounts } from "@/lib/products/import-item";
 
@@ -11,7 +13,26 @@ export type BulkImportSummaryProps = {
   onCancel: () => void;
 };
 
-export function BulkImportSummary({
+function sameCounts(previous: ImportCounts, next: ImportCounts): boolean {
+  return (
+    previous.total === next.total &&
+    previous.ready === next.ready &&
+    previous.needsReview === next.needsReview &&
+    previous.failed === next.failed &&
+    previous.duplicates === next.duplicates &&
+    previous.selected === next.selected
+  );
+}
+
+// The review grid re-renders the page on every keystroke (inline sizes); the
+// summary only has to follow the counts and the saving state.
+export const BulkImportSummary = memo(
+  BulkImportSummaryContent,
+  (previous, next) =>
+    previous.saving === next.saving && sameCounts(previous.counts, next.counts),
+);
+
+function BulkImportSummaryContent({
   counts,
   saving,
   onReviewPending,

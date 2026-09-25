@@ -1,6 +1,7 @@
 import { CalendarDays, Clock, ImageIcon } from "lucide-react";
 
 import { EditLiveDetailsSheet } from "@/components/admin/edit-live-details-sheet";
+import { LiveCoverThumbnail } from "@/components/admin/live-image-upload";
 import { LiveStatusBadge } from "@/components/admin/live-status-badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatLiveDate, formatLiveTime } from "@/lib/format";
@@ -26,10 +27,8 @@ export function CompactLiveSummaryCard({
         <div className="flex min-w-0 gap-4">
           <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground sm:size-20">
             {live.coverImageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- admin preview can render creator-provided URLs directly.
-              <img
+              <LiveCoverThumbnail
                 src={live.coverImageUrl}
-                alt=""
                 className="size-full object-cover"
               />
             ) : (

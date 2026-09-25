@@ -2,7 +2,9 @@
 
 import { LogOut, Palette } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { useEffect, useRef } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -30,6 +32,23 @@ type UserMenuProps = {
 };
 
 export function UserMenu({ name, email, image }: UserMenuProps) {
+  const pathname = usePathname();
+  // After navigating from the menu, move focus to the new page's heading so
+  // keyboard and screen-reader users start at the top of the new content.
+  const focusHeadingRef = useRef(false);
+
+  useEffect(() => {
+    if (!focusHeadingRef.current) {
+      return;
+    }
+
+    const heading = document.querySelector<HTMLElement>("main h1, main h2");
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus();
+    }
+  }, [pathname]);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -41,7 +60,14 @@ export function UserMenu({ name, email, image }: UserMenuProps) {
           <AvatarFallback>{getInitials(name)}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(event) => {
+          if (focusHeadingRef.current) {
+            event.preventDefault();
+          }
+        }}
+      >
         <DropdownMenuLabel>
           <span className="block">{name}</span>
           <span className="block max-w-52 truncate text-xs font-normal text-muted-foreground">
@@ -49,7 +75,13 @@ export function UserMenu({ name, email, image }: UserMenuProps) {
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild className="cursor-pointer gap-2">
+        <DropdownMenuItem
+          asChild
+          className="cursor-pointer gap-2"
+          onSelect={() => {
+            focusHeadingRef.current = true;
+          }}
+        >
           <Link href="/admin/appearance">
             <Palette className="size-4" aria-hidden="true" />
             Aparência da vitrine

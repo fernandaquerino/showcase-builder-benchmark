@@ -1,7 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { useId, useMemo } from "react";
+import { useId, useLayoutEffect, useMemo, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -45,6 +45,19 @@ export function BulkProductLinksInput({
   const textareaId = useId();
   const helpId = useId();
   const counterId = useId();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Grow with the pasted links so the whole list stays visible without an
+  // inner scrollbar.
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [value]);
 
   const parsed = useMemo(
     () => parseProductLinks(value, { allowedHosts, existingUrlKeys }),
@@ -72,6 +85,7 @@ export function BulkProductLinksInput({
       <div className="space-y-2">
         <Label htmlFor={textareaId}>Links dos produtos</Label>
         <Textarea
+          ref={textareaRef}
           id={textareaId}
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -79,7 +93,7 @@ export function BulkProductLinksInput({
           rows={6}
           disabled={disabled}
           aria-describedby={`${helpId} ${counterId}`}
-          className="font-mono text-sm"
+          className="resize-none overflow-hidden font-mono text-sm"
         />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p id={helpId} className="text-sm text-muted-foreground">

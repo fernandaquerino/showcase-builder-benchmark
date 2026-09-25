@@ -15,9 +15,104 @@ export type LiveImageUploadProps = {
   onChange: (url: string | null) => void;
   /** Reports upload-in-progress so the form can block its submit. */
   onUploadingChange?: (uploading: boolean) => void;
+  /** Reports a rejected file or a failed upload to the surrounding form. */
+  onError?: (message: string) => void;
   disabled?: boolean;
   error?: string;
 };
+
+/**
+ * Portrait covers (selfies, full-body looks) keep the top of the photo in view
+ * when cropped into landscape or square frames; landscape covers stay centered.
+ */
+export function coverObjectPosition(image: HTMLImageElement): string {
+  return image.naturalHeight > image.naturalWidth ? "50% 20%" : "50% 50%";
+}
+
+function isLoadedImage(node: HTMLImageElement | null): node is HTMLImageElement {
+  return Boolean(node?.complete && node.naturalWidth > 0);
+}
+
+/** Small cover thumbnail used in the live summary. */
+export function LiveCoverThumbnail({
+  src,
+  className,
+}: {
+  src: string;
+  className?: string;
+}) {
+  const [objectPosition, setObjectPosition] = useState<string | null>(null);
+
+  function measure(image: HTMLImageElement) {
+    if (objectPosition !== null) {
+      return;
+    }
+    setObjectPosition(coverObjectPosition(image));
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- admin preview can render creator-provided URLs directly.
+    <img
+      ref={(node) => {
+        if (isLoadedImage(node)) {
+          measure(node);
+        }
+      }}
+      src={src}
+      alt=""
+      className={className}
+      style={objectPosition ? { objectPosition } : undefined}
+      onLoad={(event) => measure(event.currentTarget)}
+    />
+  );
+}
+
+// Cover crops measured on the lives list, kept across navigations so the list
+// doesn't jump when the creator comes back to it.
+const listCoverPositions = new Map<string, string>();
+
+/** Cover image of a live card in the lives list. */
+export function LiveListCover({
+  liveId,
+  src,
+  alt,
+  className,
+}: {
+  liveId: string;
+  src: string;
+  alt: string;
+  className?: string;
+}) {
+  const [objectPosition, setObjectPosition] = useState<string | null>(
+    () => listCoverPositions.get(liveId) ?? null,
+  );
+
+  function measure(image: HTMLImageElement) {
+    if (listCoverPositions.has(liveId)) {
+      return;
+    }
+    const position = coverObjectPosition(image);
+    listCoverPositions.set(liveId, position);
+    setObjectPosition(position);
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- blob/external cover URL, no optimizer wildcard.
+    <img
+      ref={(node) => {
+        if (isLoadedImage(node)) {
+          measure(node);
+        }
+      }}
+      src={src}
+      alt={alt}
+      className={className}
+      style={objectPosition ? { objectPosition } : undefined}
+      loading="lazy"
+      onLoad={(event) => measure(event.currentTarget)}
+    />
+  );
+}
 
 type UploadState =
   | { kind: "idle" }
@@ -48,10 +143,12 @@ export function LiveImageUpload({
   value,
   onChange,
   onUploadingChange,
+  onError,
   disabled = false,
   error,
 }: LiveImageUploadProps) {
   const [state, setState] = useState<UploadState>({ kind: "idle" });
+  const [previewPosition, setPreviewPosition] = useState<string>();
   const inputRef = useRef<HTMLInputElement>(null);
   const helpId = useId();
   const statusId = useId();
@@ -74,6 +171,7 @@ export function LiveImageUpload({
     const validationError = validateCoverImageFile(file);
     if (validationError) {
       setState({ kind: "error", message: COVER_IMAGE_MESSAGES[validationError] });
+      onError?.(COVER_IMAGE_MESSAGES[validationError]);
       return;
     }
 
@@ -84,13 +182,12 @@ export function LiveImageUpload({
       onChange(url);
       setState({ kind: "success" });
     } catch (uploadError) {
-      setState({
-        kind: "error",
-        message:
-          uploadError instanceof Error
-            ? uploadError.message
-            : COVER_IMAGE_MESSAGES.uploadFailed,
-      });
+      const message =
+        uploadError instanceof Error
+          ? uploadError.message
+          : COVER_IMAGE_MESSAGES.uploadFailed;
+      setState({ kind: "error", message });
+      onError?.(message);
     } finally {
       onUploadingChange?.(false);
       // Allow re-selecting the same file after an error.
@@ -125,6 +222,10 @@ export function LiveImageUpload({
               src={value}
               alt="Prévia da capa da live"
               className="size-full object-cover"
+              style={previewPosition ? { objectPosition: previewPosition } : undefined}
+              onLoad={(event) =>
+                setPreviewPosition(coverObjectPosition(event.currentTarget))
+              }
             />
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
